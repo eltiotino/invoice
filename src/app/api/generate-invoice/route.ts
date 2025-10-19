@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { kv } from '@vercel/kv';
@@ -87,7 +86,9 @@ export async function POST(req: NextRequest) {
     yPos -= (lineHeight * 3);
     const tableTop = yPos;
     page.drawText('Descripción', { x: xStart, y: tableTop, font: helveticaBoldFont, size: headingFontSize });
-    page.drawText('Total', { x: width - margin - 50, y: tableTop, font: helveticaBoldFont, size: headingFontSize, align: 'right' });
+    const totalTextWidth = helveticaBoldFont.widthOfTextAtSize('Total', headingFontSize);
+    page.drawText('Total', { x: width - margin - totalTextWidth, y: tableTop, font: helveticaBoldFont, size: headingFontSize });
+    
     yPos = tableTop - 5;
     page.drawLine({ start: { x: margin, y: yPos }, end: { x: width - margin, y: yPos }, thickness: 1 });
 
@@ -95,7 +96,9 @@ export async function POST(req: NextRequest) {
     items.forEach(item => {
       const itemTotal = item.quantity * item.price;
       page.drawText(item.description, { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
-      page.drawText(`${itemTotal.toFixed(2)} €`, { x: width - margin - 50, y: yPos, font: helveticaFont, size: bodyFontSize, align: 'right' });
+      const itemTotalText = `${itemTotal.toFixed(2)} €`;
+      const itemTotalWidth = helveticaFont.widthOfTextAtSize(itemTotalText, bodyFontSize);
+      page.drawText(itemTotalText, { x: width - margin - itemTotalWidth, y: yPos, font: helveticaFont, size: bodyFontSize });
       yPos -= lineHeight;
     });
 
@@ -104,19 +107,29 @@ export async function POST(req: NextRequest) {
     yPos -= lineHeight;
 
     const summaryX = width - margin - 200;
-    const amountX = width - margin - 50;
 
     page.drawText('Base Imponible:', { x: summaryX, y: yPos, font: helveticaFont, size: bodyFontSize });
-    page.drawText(`${subtotal.toFixed(2)} €`, { x: amountX, y: yPos, font: helveticaFont, size: bodyFontSize, align: 'right' });
+    const subtotalText = `${subtotal.toFixed(2)} €`;
+    const subtotalWidth = helveticaFont.widthOfTextAtSize(subtotalText, bodyFontSize);
+    page.drawText(subtotalText, { x: width - margin - subtotalWidth, y: yPos, font: helveticaFont, size: bodyFontSize });
+    
     yPos -= lineHeight;
     page.drawText('IVA (21%):', { x: summaryX, y: yPos, font: helveticaFont, size: bodyFontSize });
-    page.drawText(`${iva.toFixed(2)} €`, { x: amountX, y: yPos, font: helveticaFont, size: bodyFontSize, align: 'right' });
+    const ivaText = `${iva.toFixed(2)} €`;
+    const ivaWidth = helveticaFont.widthOfTextAtSize(ivaText, bodyFontSize);
+    page.drawText(ivaText, { x: width - margin - ivaWidth, y: yPos, font: helveticaFont, size: bodyFontSize });
+
     yPos -= lineHeight;
     page.drawText('Retención IRPF (19%):', { x: summaryX, y: yPos, font: helveticaFont, size: bodyFontSize });
-    page.drawText(`-${irpf.toFixed(2)} €`, { x: amountX, y: yPos, font: helveticaFont, size: bodyFontSize, align: 'right' });
+    const irpfText = `-${irpf.toFixed(2)} €`;
+    const irpfWidth = helveticaFont.widthOfTextAtSize(irpfText, bodyFontSize);
+    page.drawText(irpfText, { x: width - margin - irpfWidth, y: yPos, font: helveticaFont, size: bodyFontSize });
+
     yPos -= lineHeight;
     page.drawText('TOTAL FACTURA:', { x: summaryX, y: yPos, font: helveticaBoldFont, size: headingFontSize });
-    page.drawText(`${total.toFixed(2)} €`, { x: amountX, y: yPos, font: helveticaBoldFont, size: headingFontSize, align: 'right' });
+    const totalAmountText = `${total.toFixed(2)} €`;
+    const totalAmountWidth = helveticaBoldFont.widthOfTextAtSize(totalAmountText, headingFontSize);
+    page.drawText(totalAmountText, { x: width - margin - totalAmountWidth, y: yPos, font: helveticaBoldFont, size: headingFontSize });
 
     const pdfBytes = await pdfDoc.save();
 
