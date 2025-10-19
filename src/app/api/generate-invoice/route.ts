@@ -1,25 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { kv } from '@vercel/kv';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+// --- SUPABASE CLIENT SETUP ---
+// Estas variables de entorno las configurarás en Supabase más adelante.
+// Yo te guiaré cuando llegue el momento.
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // The main data structure for an invoice
+// La interfaz sigue siendo la misma, pero ahora mapeará a una tabla de Postgres.
 export interface Invoice { 
   id: string; // e.g., 2025-0001
   number: string; // e.g., 0001
   year: number;
-  tenant: { name: string; dni: string; address: string; };
+  tenant: { name: string; dni: string; address: string; }; // Este será un campo JSONB
   invoiceDate: string;
-  items: { description: string; quantity: number; price: number; }[];
+  items: { description: string; quantity: number; price: number; }[]; // Este también será JSONB
   subtotal: number;
   iva: number;
   irpf: number;
   total: number;
 }
 
-// This function generates the next invoice number (e.g., 0001, 0002)
-async function getNextInvoiceNumber(year: number): Promise<{ id: string, number: string }> {
-    const counterKey = `invoice_counter_${year}`;
-    const newNumber = await kv.incr(counterKey);
+// --- LÓGICA DE NUMERACIÓN REESCRITA PARA SUPABASE ---
+async function getNextInvoiceNumber(year: number, supabase: SupabaseClient): Promise<{ id: string, number: string }> {
+    // 1. Buscamos la última factura de este año
+    const { data, error } = await supabase
+        .from('invoices')
+        .select('number')
+        .eq('year', year)
+        .order('number', { ascending: false })
+        .limit(1)
+        .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = 'exact one row not found' lo cual es normal si no hay facturas
+        throw new Error(error.message);
+    }
+
+    // 2. Calculamos el siguiente número
+    let newNumber = 1;
+    if (data) {
+        newNumber = parseInt(data.number, 10) + 1;
+    }
+    
+    // 3. Lo formateamos como antes
     const formattedNumber = newNumber.toString().padStart(4, '0');
     const id = `${year}-${formattedNumber}`;
     return { id, number: formattedNumber };
@@ -31,15 +57,16 @@ export async function POST(req: NextRequest) {
     const { tenant, invoiceDate, items } = body;
 
     const currentYear = new Date().getFullYear();
-    const { id: newInvoiceId, number: newInvoiceNumber } = await getNextInvoiceNumber(currentYear);
+    // Pasamos el cliente de supabase a la función
+    const { id: newInvoiceId, number: newInvoiceNumber } = await getNextInvoiceNumber(currentYear, supabase);
 
-    // --- Perform Calculations ---
+    // --- Los cálculos de la factura no cambian ---
     const subtotal = items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
     const iva = subtotal * 0.21;
     const irpf = subtotal * 0.19;
     const total = subtotal + iva - irpf;
 
-    // --- Create the full invoice object to save ---
+    // --- El objeto de la factura tampoco cambia ---
     const newInvoice: Invoice = {
         id: newInvoiceId,
         number: newInvoiceNumber,
@@ -48,10 +75,15 @@ export async function POST(req: NextRequest) {
         subtotal, iva, irpf, total
     };
 
-    // --- Save the new invoice to the KV store ---
-    await kv.set(`invoice:${newInvoiceId}`, newInvoice);
+    // --- GUARDADO DE DATOS REESCRITO PARA SUPABASE ---
+    const { error: insertError } = await supabase.from('invoices').insert(newInvoice);
 
-    // --- Generate PDF (same logic as before) ---
+    if (insertError) {
+        console.error('Supabase insert error:', insertError);
+        throw new Error(insertError.message);
+    }
+
+    // --- La generación del PDF no cambia en absoluto ---
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage();
     const { width, height } = page.getSize();
@@ -143,6 +175,7 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error(error);
-    return new NextResponse('Error al generar la factura en PDF.', { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido al generar la factura.';
+    return new NextResponse(JSON.stringify({ error: errorMessage }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
