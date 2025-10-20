@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import tenants from '@/data/tenants.json'; // Importamos los inquilinos
 
 interface Item {
   description: string;
@@ -9,15 +10,29 @@ interface Item {
   price: number;
 }
 
+interface Tenant {
+  name: string;
+  dni: string;
+  address: string;
+}
+
 export default function InvoiceForm() {
   const router = useRouter();
-  const [tenantName, setTenantName] = useState('');
-  const [tenantDni, setTenantDni] = useState('');
-  const [tenantAddress, setTenantAddress] = useState('');
+  
+  // --- ESTADO DEL INQUILINO MODIFICADO ---
+  // Ahora tenemos un único estado para el inquilino seleccionado
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(tenants[0] || null);
+
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [items, setItems] = useState<Item[]>([{ description: 'Alquiler de local comercial', quantity: 1, price: 0 }]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleTenantChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedDni = event.target.value;
+    const tenant = tenants.find(t => t.dni === selectedDni) || null;
+    setSelectedTenant(tenant);
+  };
 
   const handleAddItem = () => setItems([...items, { description: '', quantity: 1, price: 0 }]);
   const handleRemoveItem = (index: number) => setItems(items.filter((_, i) => i !== index));
@@ -43,6 +58,10 @@ export default function InvoiceForm() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!selectedTenant) {
+        setError('Por favor, selecciona un inquilino.');
+        return;
+    }
     setIsLoading(true);
     setError(null);
 
@@ -51,13 +70,16 @@ export default function InvoiceForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-            tenant: { name: tenantName, dni: tenantDni, address: tenantAddress },
+            tenant: selectedTenant, // Usamos el inquilino seleccionado
             invoiceDate: new Date(invoiceDate).toLocaleDateString('es-ES'),
             items 
         }),
       });
 
-      if (!response.ok) throw new Error(`Error: ${response.statusText}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Error: ${response.statusText}`);
+      }
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -74,7 +96,8 @@ export default function InvoiceForm() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      router.refresh(); // Refresh the page to show the new invoice in the table
+      // Ya no refrescamos la página porque no hay tabla que actualizar
+      // router.refresh(); 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ocurrió un error desconocido.');
     } finally {
@@ -89,11 +112,24 @@ export default function InvoiceForm() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div>
             <h2 className="text-xl font-semibold mb-4 text-gray-700">Datos del Inquilino</h2>
-            <div className="space-y-4">
-              <input type="text" placeholder="Nombre completo" value={tenantName} onChange={e => setTenantName(e.target.value)} required className="w-full p-3 border rounded-md" />
-              <input type="text" placeholder="DNI/NIF" value={tenantDni} onChange={e => setTenantDni(e.target.value)} required className="w-full p-3 border rounded-md" />
-              <input type="text" placeholder="Dirección" value={tenantAddress} onChange={e => setTenantAddress(e.target.value)} required className="w-full p-3 border rounded-md" />
-            </div>
+            {/* --- CAMPOS DE INQUILINO REEMPLAZADOS POR UN MENÚ DESPLEGABLE --*/}
+            <select 
+              value={selectedTenant?.dni || ''} 
+              onChange={handleTenantChange} 
+              required 
+              className="w-full p-3 border rounded-md bg-white"
+            >
+              <option value="" disabled>Selecciona un inquilino</option>
+              {tenants.map(tenant => (
+                <option key={tenant.dni} value={tenant.dni}>{tenant.name}</option>
+              ))}
+            </select>
+            {selectedTenant && (
+                <div className="mt-4 p-3 bg-gray-50 border rounded-md text-sm text-gray-600">
+                    <p><strong>DNI:</strong> {selectedTenant.dni}</p>
+                    <p><strong>Dirección:</strong> {selectedTenant.address}</p>
+                </div>
+            )}
           </div>
           <div>
             <h2 className="text-xl font-semibold mb-4 text-gray-700">Fecha de Factura</h2>
@@ -127,7 +163,7 @@ export default function InvoiceForm() {
 
         <div className="flex justify-end border-t pt-6">
           <button type="submit" disabled={isLoading} className="px-8 py-3 bg-green-600 text-white font-bold rounded-md hover:bg-green-700 disabled:bg-gray-400">
-            {isLoading ? 'Generando...' : 'Generar y Guardar Factura'}
+            {isLoading ? 'Generando...' : 'Generar Factura'}
           </button>
         </div>
         {error && <p className="text-red-500 mt-4 text-right">{error}</p>}

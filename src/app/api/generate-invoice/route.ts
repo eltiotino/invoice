@@ -1,54 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// --- SUPABASE CLIENT SETUP ---
-// Estas variables de entorno las configurarás en Supabase más adelante.
-// Yo te guiaré cuando llegue el momento.
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// The main data structure for an invoice
-// La interfaz sigue siendo la misma, pero ahora mapeará a una tabla de Postgres.
-export interface Invoice { 
-  id: string; // e.g., 2025-0001
-  number: string; // e.g., 0001
+// La interfaz de la factura sigue siendo útil para la seguridad de tipos
+export interface Invoice {
+  id: string;
+  number: string;
   year: number;
-  tenant: { name: string; dni: string; address: string; }; // Este será un campo JSONB
+  tenant: { name: string; dni: string; address: string; };
   invoiceDate: string;
-  items: { description: string; quantity: number; price: number; }[]; // Este también será JSONB
+  items: { description: string; quantity: number; price: number; }[];
   subtotal: number;
   iva: number;
   irpf: number;
   total: number;
-}
-
-// --- LÓGICA DE NUMERACIÓN REESCRITA PARA SUPABASE ---
-async function getNextInvoiceNumber(year: number, supabase: SupabaseClient): Promise<{ id: string, number: string }> {
-    // 1. Buscamos la última factura de este año
-    const { data, error } = await supabase
-        .from('invoices')
-        .select('number')
-        .eq('year', year)
-        .order('number', { ascending: false })
-        .limit(1)
-        .single();
-
-    if (error && error.code !== 'PGRST116') { // PGRST116 = 'exact one row not found' lo cual es normal si no hay facturas
-        throw new Error(error.message);
-    }
-
-    // 2. Calculamos el siguiente número
-    let newNumber = 1;
-    if (data) {
-        newNumber = parseInt(data.number, 10) + 1;
-    }
-    
-    // 3. Lo formateamos como antes
-    const formattedNumber = newNumber.toString().padStart(4, '0');
-    const id = `${year}-${formattedNumber}`;
-    return { id, number: formattedNumber };
 }
 
 export async function POST(req: NextRequest) {
@@ -56,34 +20,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as Omit<Invoice, 'id' | 'number' | 'year' | 'subtotal' | 'iva' | 'irpf' | 'total'>;
     const { tenant, invoiceDate, items } = body;
 
+    // --- Número de factura y año fijos (no hay base de datos) ---
     const currentYear = new Date().getFullYear();
-    // Pasamos el cliente de supabase a la función
-    const { id: newInvoiceId, number: newInvoiceNumber } = await getNextInvoiceNumber(currentYear, supabase);
+    const newInvoiceNumber = '0001';
+    const newInvoiceId = `${currentYear}-${newInvoiceNumber}`;
 
-    // --- Los cálculos de la factura no cambian ---
+    // --- Los cálculos no cambian ---
     const subtotal = items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
     const iva = subtotal * 0.21;
     const irpf = subtotal * 0.19;
     const total = subtotal + iva - irpf;
 
-    // --- El objeto de la factura tampoco cambia ---
-    const newInvoice: Invoice = {
-        id: newInvoiceId,
-        number: newInvoiceNumber,
-        year: currentYear,
-        ...body,
-        subtotal, iva, irpf, total
-    };
+    // --- NO HAY INTERACCIÓN CON BASE DE DATOS ---
 
-    // --- GUARDADO DE DATOS REESCRITO PARA SUPABASE ---
-    const { error: insertError } = await supabase.from('invoices').insert(newInvoice);
-
-    if (insertError) {
-        console.error('Supabase insert error:', insertError);
-        throw new Error(insertError.message);
-    }
-
-    // --- La generación del PDF no cambia en absoluto ---
+    // --- La generación del PDF no cambia ---
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage();
     const { width, height } = page.getSize();

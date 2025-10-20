@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Juan Pérez García",
+    "dni": "12345678A",
+    "address": "Calle Falsa 123, 28001 Madrid"
+  },
+  {
+    "name": "María López Fernández",
+    "dni": "87654321B",
+    "address": "Avenida Siempreviva 742, 08001 Barcelona"
+  }
+]
