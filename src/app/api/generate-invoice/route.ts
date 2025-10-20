@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
@@ -84,11 +85,13 @@ export async function POST(req: NextRequest) {
       yPos -= lineHeight;
     });
 
-    yPos -= lineHeight;
-    page.drawLine({ start: { x: width - margin - 200, y: yPos }, end: { x: width - margin, y: yPos }, thickness: 0.5 });
-    yPos -= lineHeight;
-
+    // --- SUMMARY BLOCK MOVED TO BOTTOM ---
+    // Se resetea la posición Y a un valor fijo cerca del final de la página
+    yPos = 180; // Puedes ajustar este valor para mover el bloque más arriba o abajo
     const summaryX = width - margin - 200;
+
+    page.drawLine({ start: { x: summaryX, y: yPos }, end: { x: width - margin, y: yPos }, thickness: 0.5 });
+    yPos -= lineHeight;
 
     page.drawText('Base Imponible:', { x: summaryX, y: yPos, font: helveticaFont, size: bodyFontSize });
     const subtotalText = `${subtotal.toFixed(2)} €`;
@@ -107,7 +110,7 @@ export async function POST(req: NextRequest) {
     const irpfWidth = helveticaFont.widthOfTextAtSize(irpfText, bodyFontSize);
     page.drawText(irpfText, { x: width - margin - irpfWidth, y: yPos, font: helveticaFont, size: bodyFontSize });
 
-    yPos -= lineHeight;
+    yPos -= (lineHeight * 1.5); // Espacio extra antes del total
     page.drawText('TOTAL FACTURA:', { x: summaryX, y: yPos, font: helveticaBoldFont, size: headingFontSize });
     const totalAmountText = `${total.toFixed(2)} €`;
     const totalAmountWidth = helveticaBoldFont.widthOfTextAtSize(totalAmountText, headingFontSize);
@@ -115,11 +118,14 @@ export async function POST(req: NextRequest) {
 
     const pdfBytes = await pdfDoc.save();
 
+    // --- FILENAME MADE UNIQUE ---
+    const uniqueFilename = `factura-${newInvoiceId}-${Date.now()}.pdf`;
+
     return new NextResponse(Buffer.from(pdfBytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="factura-${newInvoiceId}.pdf"`,
+        'Content-Disposition': `attachment; filename="${uniqueFilename}"`,
       },
     });
 
