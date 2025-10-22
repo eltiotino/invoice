@@ -24,7 +24,8 @@ export default function InvoiceForm() {
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(tenants[0] || null);
 
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [items, setItems] = useState<Item[]>([{ description: 'Alquiler de local comercial', quantity: 1, price: 0 }]);
+  const [invoiceNumber, setInvoiceNumber] = useState('25/10'); // Valor predeterminado en formato AA/MM
+  const [items, setItems] = useState<Item[]>([{ description: 'Alquiler de local comercial\\nAgosto de 2025\\nDireccion del Local: Calle Ribadavia 31 Local 7 29029 Madrid', quantity: 1, price: 0 }]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +73,7 @@ export default function InvoiceForm() {
         body: JSON.stringify({ 
             tenant: selectedTenant, // Usamos el inquilino seleccionado
             invoiceDate: new Date(invoiceDate).toLocaleDateString('es-ES'),
+            invoiceNumber: invoiceNumber, // Número de factura en formato AA/MM
             items 
         }),
       });
@@ -131,9 +133,23 @@ export default function InvoiceForm() {
                 </div>
             )}
           </div>
-          <div>
-            <h2 className="text-xl font-semibold mb-4 text-gray-700">Fecha de Factura</h2>
-            <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} required className="w-full p-3 border rounded-md" />
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold mb-4 text-gray-700">Fecha de Factura</h2>
+              <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} required className="w-full p-3 border rounded-md" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold mb-4 text-gray-700">Número de Factura</h2>
+              <input 
+                type="text" 
+                value={invoiceNumber} 
+                onChange={e => setInvoiceNumber(e.target.value)} 
+                required 
+                placeholder="Ej: 25/10"
+                className="w-full p-3 border rounded-md" 
+              />
+              <p className="text-sm text-gray-500 mt-1">Formato: AA/MM (ej: 25/07 para 2025, mes 7)</p>
+            </div>
           </div>
         </div>
 

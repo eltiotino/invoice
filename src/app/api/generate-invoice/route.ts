@@ -9,6 +9,7 @@ export interface Invoice {
   year: number;
   tenant: { name: string; dni: string; address: string; };
   invoiceDate: string;
+  invoiceNumber?: string; // Número de factura en formato AA/MM (opcional en la interfaz ya que lo proporcionamos en el body)
   items: { description: string; quantity: number; price: number; }[];
   subtotal: number;
   iva: number;
@@ -19,11 +20,11 @@ export interface Invoice {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as Omit<Invoice, 'id' | 'number' | 'year' | 'subtotal' | 'iva' | 'irpf' | 'total'>;
-    const { tenant, invoiceDate, items } = body;
+    const { tenant, invoiceDate, invoiceNumber, items } = body;
 
-    // --- Número de factura y año fijos (no hay base de datos) ---
+    // --- Usar el número de factura proporcionado manualmente ---
+    const newInvoiceNumber = invoiceNumber; // Número de factura en formato AA/MM proporcionado por el usuario
     const currentYear = new Date().getFullYear();
-    const newInvoiceNumber = '0001';
     const newInvoiceId = `${currentYear}-${newInvoiceNumber}`;
 
     // --- Los cálculos no cambian ---
@@ -51,11 +52,17 @@ export async function POST(req: NextRequest) {
     let yPos = yStart - (lineHeight * 3);
     page.drawText('EMISOR:', { x: xStart, y: yPos, font: helveticaBoldFont, size: headingFontSize });
     yPos -= lineHeight;
-    page.drawText('Valentín Morala Aparico', { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
+    page.drawText('Valentín Morala Aparicio', { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
     yPos -= lineHeight;
-    page.drawText('DNI: 38445836R', { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
+    page.drawText('DNI: 34445836R', { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
     yPos -= lineHeight;
-    page.drawText('Calle Ribadavia 31 4º 1, 28029 Madrid', { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
+    page.drawText('Representante Legal: Sofía Morala Morena', { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
+    yPos -= lineHeight;
+    page.drawText('DNI Representante Legal: 02875027G', { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
+    yPos -= lineHeight;
+    page.drawText('Ribadavia 31 4 1 28029 Madrid', { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
+    yPos -= lineHeight;
+    page.drawText('Teléfono: 629 914 548', { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
 
     yPos = yStart - (lineHeight * 3);
     page.drawText('CLIENTE (ARRENDATARIO):', { x: xStart + 300, y: yPos, font: helveticaBoldFont, size: headingFontSize });
@@ -66,7 +73,7 @@ export async function POST(req: NextRequest) {
     yPos -= lineHeight;
     page.drawText(tenant.address, { x: xStart + 300, y: yPos, font: helveticaFont, size: bodyFontSize });
 
-    yPos -= (lineHeight * 3);
+    yPos -= (lineHeight * 5); // Move table further down the page
     const tableTop = yPos;
     page.drawText('Descripción', { x: xStart, y: tableTop, font: helveticaBoldFont, size: headingFontSize });
     const totalTextWidth = helveticaBoldFont.widthOfTextAtSize('Total', headingFontSize);
@@ -78,11 +85,26 @@ export async function POST(req: NextRequest) {
     yPos -= lineHeight;
     items.forEach(item => {
       const itemTotal = item.quantity * item.price;
-      page.drawText(item.description, { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
-      const itemTotalText = `${itemTotal.toFixed(2)} €`;
-      const itemTotalWidth = helveticaFont.widthOfTextAtSize(itemTotalText, bodyFontSize);
-      page.drawText(itemTotalText, { x: width - margin - itemTotalWidth, y: yPos, font: helveticaFont, size: bodyFontSize });
-      yPos -= lineHeight;
+      // Check if description contains newline characters and handle accordingly
+      if (item.description.includes('\\n') || item.description.includes('\n')) {
+        // Split the description by newlines and draw each line
+        const descriptionLines = item.description.split(/\\n|\n/);
+        descriptionLines.forEach((line, index) => {
+          page.drawText(line.trim(), { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
+          yPos -= lineHeight;
+        });
+        // Draw the total amount on the same y position as the last line of the description
+        const itemTotalText = `${itemTotal.toFixed(2)} €`;
+        const itemTotalWidth = helveticaFont.widthOfTextAtSize(itemTotalText, bodyFontSize);
+        page.drawText(itemTotalText, { x: width - margin - itemTotalWidth, y: yPos + (lineHeight * descriptionLines.length) - lineHeight, font: helveticaFont, size: bodyFontSize });
+      } else {
+        // Original behavior for single line descriptions
+        page.drawText(item.description, { x: xStart, y: yPos, font: helveticaFont, size: bodyFontSize });
+        const itemTotalText = `${itemTotal.toFixed(2)} €`;
+        const itemTotalWidth = helveticaFont.widthOfTextAtSize(itemTotalText, bodyFontSize);
+        page.drawText(itemTotalText, { x: width - margin - itemTotalWidth, y: yPos, font: helveticaFont, size: bodyFontSize });
+        yPos -= lineHeight * 1.5; // Increased line height to provide more space between items for multiline descriptions
+      }
     });
 
     // --- SUMMARY BLOCK MOVED TO BOTTOM ---
@@ -115,6 +137,15 @@ export async function POST(req: NextRequest) {
     const totalAmountText = `${total.toFixed(2)} €`;
     const totalAmountWidth = helveticaBoldFont.widthOfTextAtSize(totalAmountText, headingFontSize);
     page.drawText(totalAmountText, { x: width - margin - totalAmountWidth, y: yPos, font: helveticaBoldFont, size: headingFontSize });
+
+    // Add payment information at the bottom of the invoice
+    yPos -= (lineHeight * 3); // Move down below the total
+    page.drawText('Forma de Pago: Transferencia bancaria a la cuenta ES50 0049 3102 9726 9404 6635', { 
+      x: xStart, 
+      y: yPos, 
+      font: helveticaFont, 
+      size: bodyFontSize 
+    });
 
     const pdfBytes = await pdfDoc.save();
 
